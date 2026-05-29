@@ -1,14 +1,17 @@
 import zipfile
-from typing import List
+from typing import List, Optional, Tuple, Union
 
 import pytorch_lightning as pl
 import torch.optim as optim
 from torch import FloatTensor, LongTensor
 
 from comer.datamodule import Batch, vocab
+from comer.losses import LayerWeightedFisherLoss, build_teacher_forcing_labels
 from comer.model.comer import CoMER
 from comer.utils.utils import (ExpRateRecorder, Hypothesis, ce_loss,
                                to_bi_tgt_out)
+
+_PAD_IDX, _SOS_IDX, _EOS_IDX = 0, 1, 2
 
 
 class LitCoMER(pl.LightningModule):
@@ -35,6 +38,13 @@ class LitCoMER(pl.LightningModule):
         # training
         learning_rate: float,
         patience: int,
+        # fisher loss
+        use_fisher_loss: bool = False,
+        lambda_fisher: float = 0.0,
+        fisher_warmup_epoch: int = 0,
+        fisher_proj_dim: Optional[int] = None,
+        fisher_ignore_special_tokens: bool = True,
+        learn_layer_weight: bool = True,
     ):
         super().__init__()
         self.save_hyperparameters()
@@ -52,11 +62,28 @@ class LitCoMER(pl.LightningModule):
             self_coverage=self_coverage,
         )
 
+        self.fisher_loss: Optional[LayerWeightedFisherLoss] = None
+        if use_fisher_loss:
+            ignore_index = (_PAD_IDX, _SOS_IDX, _EOS_IDX)
+            if not fisher_ignore_special_tokens:
+                ignore_index = (_PAD_IDX,)
+            self.fisher_loss = LayerWeightedFisherLoss(
+                num_layers=num_decoder_layers,
+                feat_dim=d_model,
+                proj_dim=fisher_proj_dim,
+                ignore_index=ignore_index,
+                learn_layer_weight=learn_layer_weight,
+            )
+
         self.exprate_recorder = ExpRateRecorder()
 
     def forward(
-        self, img: FloatTensor, img_mask: LongTensor, tgt: LongTensor
-    ) -> FloatTensor:
+        self,
+        img: FloatTensor,
+        img_mask: LongTensor,
+        tgt: LongTensor,
+        return_all_features: bool = False,
+    ) -> Union[FloatTensor, Tuple[FloatTensor, List[FloatTensor]]]:
         """run img and bi-tgt
 
         Parameters
@@ -67,20 +94,55 @@ class LitCoMER(pl.LightningModule):
             [b, h, w]
         tgt : LongTensor
             [2b, l]
+        return_all_features : bool
+            If True, also return per-layer decoder hidden states.
 
         Returns
         -------
-        FloatTensor
-            [2b, l, vocab_size]
+        FloatTensor or (FloatTensor, List[FloatTensor])
+            [2b, l, vocab_size], or logits plus layer features.
         """
-        return self.comer_model(img, img_mask, tgt)
+        return self.comer_model(
+            img, img_mask, tgt, return_all_features=return_all_features
+        )
 
     def training_step(self, batch: Batch, _):
         tgt, out = to_bi_tgt_out(batch.indices, self.device)
-        out_hat = self(batch.imgs, batch.mask, tgt)
 
-        loss = ce_loss(out_hat, out)
-        self.log("train_loss", loss, on_step=False, on_epoch=True, sync_dist=True)
+        if self.hparams.use_fisher_loss:
+            out_hat, layer_features = self(
+                batch.imgs, batch.mask, tgt, return_all_features=True
+            )
+            ce = ce_loss(out_hat, out)
+            target_labels = build_teacher_forcing_labels(tgt, out)
+            fisher, layer_weights = self.fisher_loss(layer_features, target_labels)
+
+            if self.current_epoch >= self.hparams.fisher_warmup_epoch:
+                loss = ce + self.hparams.lambda_fisher * fisher
+            else:
+                loss = ce
+
+            self.log("train_ce_loss", ce, on_step=False, on_epoch=True, sync_dist=True)
+            self.log(
+                "train_fisher_loss",
+                fisher,
+                on_step=False,
+                on_epoch=True,
+                sync_dist=True,
+            )
+            self.log("train_loss", loss, on_step=False, on_epoch=True, sync_dist=True)
+            for i, w in enumerate(layer_weights):
+                self.log(
+                    f"train_fisher_layer_weight_{i}",
+                    w,
+                    on_step=False,
+                    on_epoch=True,
+                    sync_dist=True,
+                )
+        else:
+            out_hat = self(batch.imgs, batch.mask, tgt)
+            loss = ce_loss(out_hat, out)
+            self.log("train_loss", loss, on_step=False, on_epoch=True, sync_dist=True)
 
         return loss
 

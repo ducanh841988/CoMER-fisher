@@ -12,7 +12,7 @@ trainer:
         mode: max
         filename: '{epoch}-{step}-{val_ExpRate:.4f}'
   # gpus: 1
-  gpus: 0, 1, 2, 3
+  gpus: 0
   accelerator: ddp
   check_val_every_n_epoch: 2
   max_epochs: 300
@@ -39,6 +39,13 @@ model:
   # training
   learning_rate: 0.08
   patience: 20
+  # fisher loss
+  use_fisher_loss: true
+  lambda_fisher: 0.005
+  fisher_warmup_epoch: 20
+  fisher_proj_dim: 128
+  fisher_ignore_special_tokens: true
+  learn_layer_weight: true
 data:
   zipfile_path: data.zip
   test_year: 2014

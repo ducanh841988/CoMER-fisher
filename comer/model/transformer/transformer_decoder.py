@@ -1,6 +1,6 @@
 import copy
 from functools import partial
-from typing import Optional
+from typing import List, Optional, Tuple, Union
 
 import torch.nn as nn
 import torch.nn.functional as F
@@ -38,8 +38,10 @@ class TransformerDecoder(nn.Module):
         memory_mask: Optional[Tensor] = None,
         tgt_key_padding_mask: Optional[Tensor] = None,
         memory_key_padding_mask: Optional[Tensor] = None,
-    ) -> Tensor:
+        return_all_features: bool = False,
+    ) -> Union[Tensor, Tuple[Tensor, List[Tensor]]]:
         output = tgt
+        layer_outputs: List[Tensor] = []
 
         arm = None
         for i, mod in enumerate(self.layers):
@@ -52,12 +54,16 @@ class TransformerDecoder(nn.Module):
                 tgt_key_padding_mask=tgt_key_padding_mask,
                 memory_key_padding_mask=memory_key_padding_mask,
             )
+            if return_all_features:
+                layer_outputs.append(output)
             if i != len(self.layers) - 1 and self.arm is not None:
                 arm = partial(self.arm, attn, memory_key_padding_mask, height)
 
         if self.norm is not None:
             output = self.norm(output)
 
+        if return_all_features:
+            return output, layer_outputs
         return output
 
 

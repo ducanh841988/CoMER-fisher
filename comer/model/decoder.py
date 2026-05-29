@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Tuple, Union
 
 import torch
 import torch.nn as nn
@@ -85,8 +85,12 @@ class Decoder(DecodeModel):
         return mask
 
     def forward(
-        self, src: FloatTensor, src_mask: LongTensor, tgt: LongTensor
-    ) -> FloatTensor:
+        self,
+        src: FloatTensor,
+        src_mask: LongTensor,
+        tgt: LongTensor,
+        return_all_features: bool = False,
+    ) -> Union[FloatTensor, Tuple[FloatTensor, List[FloatTensor]]]:
         """generate output for tgt
 
         Parameters
@@ -97,11 +101,13 @@ class Decoder(DecodeModel):
             [b, h, w]
         tgt : LongTensor
             [b, l]
+        return_all_features : bool
+            If True, also return per-layer decoder hidden states.
 
         Returns
         -------
-        FloatTensor
-            [b, l, vocab_size]
+        FloatTensor or (FloatTensor, List[FloatTensor])
+            [b, l, vocab_size], or logits plus layer features [b, l, d] each.
         """
         _, l = tgt.size()
         tgt_mask = self._build_attention_mask(l)
@@ -116,19 +122,35 @@ class Decoder(DecodeModel):
         src_mask = rearrange(src_mask, "b h w -> b (h w)")
         tgt = rearrange(tgt, "b l d -> l b d")
 
-        out = self.model(
-            tgt=tgt,
-            memory=src,
-            height=h,
-            tgt_mask=tgt_mask,
-            tgt_key_padding_mask=tgt_pad_mask,
-            memory_key_padding_mask=src_mask,
-        )
+        if return_all_features:
+            out, layer_features = self.model(
+                tgt=tgt,
+                memory=src,
+                height=h,
+                tgt_mask=tgt_mask,
+                tgt_key_padding_mask=tgt_pad_mask,
+                memory_key_padding_mask=src_mask,
+                return_all_features=True,
+            )
+            layer_features = [
+                rearrange(f, "l b d -> b l d") for f in layer_features
+            ]
+        else:
+            out = self.model(
+                tgt=tgt,
+                memory=src,
+                height=h,
+                tgt_mask=tgt_mask,
+                tgt_key_padding_mask=tgt_pad_mask,
+                memory_key_padding_mask=src_mask,
+            )
 
         out = rearrange(out, "l b d -> b l d")
-        out = self.proj(out)
+        logits = self.proj(out)
 
-        return out
+        if return_all_features:
+            return logits, layer_features
+        return logits
 
     def transform(
         self, src: List[FloatTensor], src_mask: List[LongTensor], input_ids: LongTensor

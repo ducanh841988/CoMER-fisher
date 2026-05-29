@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Tuple, Union
 
 import pytorch_lightning as pl
 import torch
@@ -41,8 +41,12 @@ class CoMER(pl.LightningModule):
         )
 
     def forward(
-        self, img: FloatTensor, img_mask: LongTensor, tgt: LongTensor
-    ) -> FloatTensor:
+        self,
+        img: FloatTensor,
+        img_mask: LongTensor,
+        tgt: LongTensor,
+        return_all_features: bool = False,
+    ) -> Union[FloatTensor, Tuple[FloatTensor, List[FloatTensor]]]:
         """run img and bi-tgt
 
         Parameters
@@ -53,19 +57,19 @@ class CoMER(pl.LightningModule):
             [b, h, w]
         tgt : LongTensor
             [2b, l]
+        return_all_features : bool
+            If True, also return per-layer decoder hidden states.
 
         Returns
         -------
-        FloatTensor
-            [2b, l, vocab_size]
+        FloatTensor or (FloatTensor, List[FloatTensor])
+            [2b, l, vocab_size], or logits plus layer features [2b, l, d] each.
         """
         feature, mask = self.encoder(img, img_mask)  # [b, t, d]
         feature = torch.cat((feature, feature), dim=0)  # [2b, t, d]
         mask = torch.cat((mask, mask), dim=0)
 
-        out = self.decoder(feature, mask, tgt)
-
-        return out
+        return self.decoder(feature, mask, tgt, return_all_features=return_all_features)
 
     def beam_search(
         self,

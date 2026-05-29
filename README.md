@@ -10,6 +10,7 @@
 ```bash
 ├── README.md
 ├── comer               # model definition folder
+│   └── losses          # Fisher loss (LayerWeightedFisherLoss)
 ├── convert2symLG       # official tool to convert latex to symLG format
 ├── lgeval              # official tool to compare symLGs in two folder
 ├── config.yaml         # config for CoMER hyperparameter
@@ -77,6 +78,49 @@ gpus: 1
 # gpus: 4
 # accelerator: ddp
 ```
+
+## Layer-weighted Fisher loss (optional)
+
+Training can add a **layer-weighted Fisher loss** on decoder hidden states, combined with the original bidirectional CE loss:
+
+```
+total_loss = CE + λ * Fisher        (only when epoch >= fisher_warmup_epoch)
+```
+
+Implementation lives in `comer/losses/fisher_loss.py` (`LayerWeightedFisherLoss`). Each decoder layer produces hidden states `[B, L, D]`; a learnable softmax over layers weights per-layer Fisher terms. Features are projected, L2-normalized, and scored with a Fisher criterion (within-class vs. between-class scatter).
+
+### Teacher-forcing label alignment
+
+Under teacher forcing, decoder input is `tgt` and targets are `out` (from `to_bi_tgt_out`). Fisher uses a full sequence `y` with `y[:, 1:] == out`:
+
+```python
+y = build_teacher_forcing_labels(tgt, out)  # [B, L + 1]
+```
+
+Hidden state at time `t` is paired with `out[:, t]`. No extra flip is needed for the bidirectional batch (`[2B, L]`): L2R and R2L rows each use their own `tgt` / `out`.
+
+### Config (`config.yaml`)
+
+```yaml
+# fisher loss
+use_fisher_loss: true              # set false to train with CE only
+lambda_fisher: 0.005               # weight λ after warmup
+fisher_warmup_epoch: 20            # CE-only for epochs 0..19; Fisher from epoch 20
+fisher_proj_dim: 128               # projection dim for Fisher features
+fisher_ignore_special_tokens: true # ignore PAD, SOS, EOS in Fisher (if false, only PAD)
+learn_layer_weight: true           # learn softmax layer weights (if false, uniform 1/L)
+```
+
+### Training logs
+
+When `use_fisher_loss: true`, Lightning logs:
+
+- `train_ce_loss` — cross-entropy only
+- `train_fisher_loss` — Fisher term (logged every epoch; not added to `train_loss` until warmup)
+- `train_loss` — total optimized loss (`CE` or `CE + λ * Fisher`)
+- `train_fisher_layer_weight_{i}` — softmax weight for decoder layer `i`
+
+Validation still uses CE only (no Fisher at inference).
 
 ## Evaluation
 Metrics used in validation during the training process is not accurate.
