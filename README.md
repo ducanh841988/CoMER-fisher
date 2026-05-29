@@ -116,7 +116,7 @@ learn_layer_weight: true           # learn softmax layer weights (if false, unif
 When `use_fisher_loss: true`, Lightning logs:
 
 - `train_ce_loss` — cross-entropy only
-- `train_fisher_loss` — Fisher term (logged every epoch; not added to `train_loss` until warmup)
+- `train_fisher_loss` — Fisher term (logged from `fisher_warmup_epoch` onward)
 - `train_loss` — total optimized loss (`CE` or `CE + λ * Fisher`)
 - `train_fisher_layer_weight_{i}` — softmax weight for decoder layer `i`
 

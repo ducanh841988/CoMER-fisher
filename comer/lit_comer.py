@@ -106,21 +106,23 @@ class LitCoMER(pl.LightningModule):
             img, img_mask, tgt, return_all_features=return_all_features
         )
 
+    def _fisher_active(self) -> bool:
+        return (
+            self.hparams.use_fisher_loss
+            and self.current_epoch >= self.hparams.fisher_warmup_epoch
+        )
+
     def training_step(self, batch: Batch, _):
         tgt, out = to_bi_tgt_out(batch.indices, self.device)
 
-        if self.hparams.use_fisher_loss:
+        if self._fisher_active():
             out_hat, layer_features = self(
                 batch.imgs, batch.mask, tgt, return_all_features=True
             )
             ce = ce_loss(out_hat, out)
             target_labels = build_teacher_forcing_labels(tgt, out)
             fisher, layer_weights = self.fisher_loss(layer_features, target_labels)
-
-            if self.current_epoch >= self.hparams.fisher_warmup_epoch:
-                loss = ce + self.hparams.lambda_fisher * fisher
-            else:
-                loss = ce
+            loss = ce + self.hparams.lambda_fisher * fisher
 
             self.log("train_ce_loss", ce, on_step=False, on_epoch=True, sync_dist=True)
             self.log(
@@ -143,6 +145,14 @@ class LitCoMER(pl.LightningModule):
             out_hat = self(batch.imgs, batch.mask, tgt)
             loss = ce_loss(out_hat, out)
             self.log("train_loss", loss, on_step=False, on_epoch=True, sync_dist=True)
+            if self.hparams.use_fisher_loss:
+                self.log(
+                    "train_ce_loss",
+                    loss,
+                    on_step=False,
+                    on_epoch=True,
+                    sync_dist=True,
+                )
 
         return loss
 
