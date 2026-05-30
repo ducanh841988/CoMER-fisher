@@ -109,6 +109,26 @@ fisher_warmup_epoch: 20            # CE-only for epochs 0..19; Fisher from epoch
 fisher_proj_dim: 128               # projection dim for Fisher features
 fisher_ignore_special_tokens: true # ignore PAD, SOS, EOS in Fisher (if false, only PAD)
 learn_layer_weight: true           # learn softmax layer weights (if false, uniform 1/L)
+pretrained_ckpt: null              # path to a Lightning .ckpt (CoMER weights only, strict=False)
+```
+
+### Fine-tune from a pretrained CoMER checkpoint
+
+Set `use_fisher_loss: true` and point `pretrained_ckpt` at an existing checkpoint (e.g. `lightning_logs/version_0/checkpoints/...ckpt`). Training starts at **epoch 0** with:
+
+- **Loaded:** encoder / decoder weights that match the checkpoint
+- **Random init:** `fisher_loss` projection and layer weights
+- **Skipped:** old ARM keys that no longer match the current module layout (logged as `unexpected`)
+
+Do **not** use `trainer.resume_from_checkpoint` for this — it expects the exact same model and optimizer state.
+
+```yaml
+use_fisher_loss: true
+pretrained_ckpt: lightning_logs/version_0/checkpoints/epoch=151-step=57151-val_ExpRate=0.6365.ckpt
+```
+
+```bash
+python train.py --config config.yaml
 ```
 
 ### Training logs
@@ -117,10 +137,24 @@ When `use_fisher_loss: true`, Lightning logs:
 
 - `train_ce_loss` — cross-entropy only
 - `train_fisher_loss` — Fisher term (logged from `fisher_warmup_epoch` onward)
+- `train_fisher_weighted` — `lambda_fisher * train_fisher_loss`
 - `train_loss` — total optimized loss (`CE` or `CE + λ * Fisher`)
 - `train_fisher_layer_weight_{i}` — softmax weight for decoder layer `i`
 
 Validation still uses CE only (no Fisher at inference).
+
+### Plot loss curves
+
+```bash
+# latest run under lightning_logs/
+python scripts/plot_loss_curves.py
+
+# specific version
+python scripts/plot_loss_curves.py --logdir lightning_logs/version_6
+python scripts/plot_loss_curves.py --logdir 6 --output training_curves.png
+```
+
+Or use TensorBoard: `tensorboard --logdir lightning_logs`
 
 ## Evaluation
 Metrics used in validation during the training process is not accurate.

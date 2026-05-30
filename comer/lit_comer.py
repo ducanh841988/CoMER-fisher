@@ -2,7 +2,9 @@ import zipfile
 from typing import List, Optional, Tuple, Union
 
 import pytorch_lightning as pl
+import torch
 import torch.optim as optim
+from pytorch_lightning.utilities.distributed import rank_zero_info
 from torch import FloatTensor, LongTensor
 
 from comer.datamodule import Batch, vocab
@@ -45,6 +47,7 @@ class LitCoMER(pl.LightningModule):
         fisher_proj_dim: Optional[int] = None,
         fisher_ignore_special_tokens: bool = True,
         learn_layer_weight: bool = True,
+        pretrained_ckpt: Optional[str] = None,
     ):
         super().__init__()
         self.save_hyperparameters()
@@ -76,6 +79,45 @@ class LitCoMER(pl.LightningModule):
             )
 
         self.exprate_recorder = ExpRateRecorder()
+
+    def on_train_epoch_start(self) -> None:
+        device = self.device
+        self._epoch_loss_sum = torch.zeros((), device=device)
+        self._epoch_loss_count = torch.zeros((), device=device)
+
+    def _accumulate_epoch_train_loss(self, loss: torch.Tensor) -> None:
+        self._epoch_loss_sum = self._epoch_loss_sum + loss.detach()
+        self._epoch_loss_count = self._epoch_loss_count + 1
+
+    def get_epoch_train_loss(self) -> Optional[float]:
+        if self._epoch_loss_count.item() == 0:
+            return None
+        loss_sum = self._epoch_loss_sum.clone()
+        count = self._epoch_loss_count.clone()
+        if self.trainer is not None and self.trainer.world_size > 1:
+            torch.distributed.all_reduce(loss_sum)
+            torch.distributed.all_reduce(count)
+        return (loss_sum / count).item()
+
+    def on_fit_start(self) -> None:
+        path = self.hparams.pretrained_ckpt
+        if not path:
+            return
+
+        ckpt = torch.load(path, map_location="cpu")
+        state_dict = ckpt.get("state_dict", ckpt)
+        incompatible = self.load_state_dict(state_dict, strict=False)
+        rank_zero_info(
+            "Loaded pretrained weights from %s (strict=False). "
+            "missing=%d unexpected=%d",
+            path,
+            len(incompatible.missing_keys),
+            len(incompatible.unexpected_keys),
+        )
+        if incompatible.missing_keys:
+            rank_zero_info("  missing: %s", incompatible.missing_keys)
+        if incompatible.unexpected_keys:
+            rank_zero_info("  unexpected: %s", incompatible.unexpected_keys)
 
     def forward(
         self,
@@ -122,12 +164,20 @@ class LitCoMER(pl.LightningModule):
             ce = ce_loss(out_hat, out)
             target_labels = build_teacher_forcing_labels(tgt, out)
             fisher, layer_weights = self.fisher_loss(layer_features, target_labels)
-            loss = ce + self.hparams.lambda_fisher * fisher
+            fisher_weighted = self.hparams.lambda_fisher * fisher
+            loss = ce + fisher_weighted
 
             self.log("train_ce_loss", ce, on_step=False, on_epoch=True, sync_dist=True)
             self.log(
                 "train_fisher_loss",
                 fisher,
+                on_step=False,
+                on_epoch=True,
+                sync_dist=True,
+            )
+            self.log(
+                "train_fisher_weighted",
+                fisher_weighted,
                 on_step=False,
                 on_epoch=True,
                 sync_dist=True,
@@ -154,6 +204,7 @@ class LitCoMER(pl.LightningModule):
                     sync_dist=True,
                 )
 
+        self._accumulate_epoch_train_loss(loss)
         return loss
 
     def validation_step(self, batch: Batch, _):

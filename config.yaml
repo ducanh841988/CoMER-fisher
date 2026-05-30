@@ -5,15 +5,19 @@ trainer:
     - class_path: pytorch_lightning.callbacks.LearningRateMonitor
       init_args:
         logging_interval: epoch
+    - class_path: comer.callbacks.skip_validation.SkipValidationOnHighTrainLoss
+      init_args:
+        threshold: 1.0
+        monitor: train_loss
     - class_path: pytorch_lightning.callbacks.ModelCheckpoint
       init_args:
         save_top_k: 1
         monitor: val_ExpRate
         mode: max
         filename: '{epoch}-{step}-{val_ExpRate:.4f}'
-  # gpus: 1
-  gpus: 0
+  gpus: 1  # PL 1.4: use cuda:0 and cuda:1
   accelerator: ddp
+  # gpus: 1
   check_val_every_n_epoch: 2
   max_epochs: 300
   deterministic: true
@@ -41,11 +45,14 @@ model:
   patience: 20
   # fisher loss
   use_fisher_loss: true
-  lambda_fisher: 0.005
-  fisher_warmup_epoch: 20
+  lambda_fisher: 0.1
+  fisher_warmup_epoch: 0
   fisher_proj_dim: 128
   fisher_ignore_special_tokens: true
   learn_layer_weight: true
+  # load CoMER weights only; Fisher head is randomly initialized
+  # pretrained_ckpt: lightning_logs/version_0/checkpoints/epoch=151-step=57151-val_ExpRate=0.6365.ckpt
+  pretrained_ckpt: lightning_logs/version_5/checkpoints/epoch=33-step=22065-val_ExpRate=0.5299.ckpt
 data:
   zipfile_path: data.zip
   test_year: 2014
