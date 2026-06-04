@@ -9,6 +9,11 @@ from torch import Tensor
 _PAD_IDX, _SOS_IDX, _EOS_IDX = 0, 1, 2
 
 
+def _zero_loss(z: Tensor) -> Tensor:
+    """Scalar zero that stays connected to ``z`` for autograd."""
+    return z.sum() * 0.0
+
+
 def fisher_loss_single_layer(
     z: Tensor,
     labels: Tensor,
@@ -35,11 +40,11 @@ def fisher_loss_single_layer(
         Scalar Fisher loss.
     """
     if z.numel() == 0 or labels.numel() == 0:
-        return z.new_zeros(())
+        return _zero_loss(z)
 
     classes = labels.unique()
     if classes.numel() < 2:
-        return z.new_zeros(())
+        return _zero_loss(z)
 
     global_mean = z.mean(dim=0)
 
@@ -53,6 +58,9 @@ def fisher_loss_single_layer(
         mu_c = z_c.mean(dim=0)
         class_means.append(mu_c)
         within = within + ((z_c - mu_c) ** 2).sum() / z_c.size(0)
+
+    if len(class_means) < 2:
+        return _zero_loss(z)
 
     within = within / len(class_means)
 
@@ -236,7 +244,7 @@ class LayerWeightedFisherLoss(nn.Module):
         for w, feat in zip(weights, layer_features):
             z, y = self._mask_valid(feat, target)
             z = self.proj(z)
-            z = F.normalize(z, dim=-1)
+            z = F.normalize(z, dim=-1, eps=1e-6)
             loss = loss + w * fisher_loss_single_layer(z, y, eps=self.eps)
 
         return loss, weights

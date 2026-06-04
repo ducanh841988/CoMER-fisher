@@ -29,9 +29,11 @@ class MaskBatchNorm2d(nn.Module):
 
         not_mask = ~mask
 
+        x_out = x.clone()
         flat_x = x[not_mask, :]
         flat_x = self.bn(flat_x)
-        x[not_mask, :] = flat_x
+        x_out[not_mask, :] = flat_x
+        x = x_out
 
         x = rearrange(x, "b h w d -> b d h w")
 
@@ -52,7 +54,7 @@ class AttentionRefinementModule(nn.Module):
             in_chs = nhead
 
         self.conv = nn.Conv2d(in_chs, dc, kernel_size=5, padding=2)
-        self.act = nn.ReLU(inplace=True)
+        self.act = nn.ReLU(inplace=False)
 
         self.proj = nn.Conv2d(dc, nhead, kernel_size=1, bias=False)
         self.post_norm = MaskBatchNorm2d(nhead)

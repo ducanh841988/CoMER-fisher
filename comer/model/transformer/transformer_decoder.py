@@ -55,7 +55,7 @@ class TransformerDecoder(nn.Module):
                 memory_key_padding_mask=memory_key_padding_mask,
             )
             if return_all_features:
-                layer_outputs.append(output)
+                layer_outputs.append(output.clone())
             if i != len(self.layers) - 1 and self.arm is not None:
                 arm = partial(self.arm, attn, memory_key_padding_mask, height)
 

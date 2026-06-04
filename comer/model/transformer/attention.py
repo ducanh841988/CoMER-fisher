@@ -388,7 +388,7 @@ def multi_head_attention_forward(
 
     attention = mask_softmax_dropout(attn_output_weights)
     if arm is not None:
-        attn_output_weights -= arm(attention)
+        attn_output_weights = attn_output_weights - arm(attention)
         attention = mask_softmax_dropout(attn_output_weights)
 
     attn_output = torch.bmm(attention, v)

@@ -94,9 +94,10 @@ class LitCoMER(pl.LightningModule):
             return None
         loss_sum = self._epoch_loss_sum.clone()
         count = self._epoch_loss_count.clone()
-        if self.trainer is not None and self.trainer.world_size > 1:
-            torch.distributed.all_reduce(loss_sum)
-            torch.distributed.all_reduce(count)
+        if self.trainer is not None and torch.distributed.is_initialized():
+            if self.trainer.world_size > 1:
+                torch.distributed.all_reduce(loss_sum)
+                torch.distributed.all_reduce(count)
         return (loss_sum / count).item()
 
     def on_fit_start(self) -> None:

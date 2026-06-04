@@ -129,3 +129,5 @@ result.zip
 test_temp
 Results_pred_symlg
 *.tfevents.*
+lightning_logs/
+training_curves.png

@@ -119,7 +119,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--logdir",
-        default="7",
+        default="11",
         help="Path to lightning_logs/version_N, version index (e.g. 6), or 'latest'",
     )
     parser.add_argument(
