@@ -1,0 +1,7 @@
+# IUD, 15_1
+# Objects(2):
+O, f_3, f, 1.0, OSub
+O, B_2, B, 1.0, O
+
+# Relations from SRT:
+R, B_2, f_3, Sub, 1.0

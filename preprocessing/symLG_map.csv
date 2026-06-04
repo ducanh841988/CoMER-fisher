@@ -1,0 +1,33 @@
+# LaTeX mapping for TC11 / CROHME SymLG label graphs (lg2txt format).
+# Adapted from lgeval/translate/mathMLMap.csv relation patterns.
+
+SYMBOLS
+cos,->,\cos
+sin,->,\sin
+tan,->,\tan
+log,->,\log
+ln,->,\ln
+sqrt,->,\sqrt
+times,->,\times
+div,->,\div
+pi,->,\pi
+alpha,->,\alpha
+beta,->,\beta
+gamma,->,\gamma
+Delta,->,\Delta
+infty,->,\infty
+OBJ_DEFAULT,->,_L_
+
+STRUCTURE
+sqrt,CONTAINS,->,\sqrt,CONTAINS
+-,Above,Below,->,\frac,Above,Below
+-,B,A,->,\frac,A,B
+-,ABOVE,BELOW,->,\frac,ABOVE,BELOW
+Sup,->,PARENT,^,{,CHILD,}
+SUP,->,PARENT,^,{,CHILD,}
+Sub,->,PARENT,_,{,CHILD,}
+SUB,->,PARENT,_,{,CHILD,}
+Right,->,PARENT,CHILD
+R,->,PARENT,CHILD
+HOR,->,PARENT,CHILD
+REL_DEFAULT,->,PARENT,CHILD

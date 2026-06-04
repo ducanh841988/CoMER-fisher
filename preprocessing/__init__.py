@@ -1,6 +1,8 @@
 from preprocessing.lg_srt import SymbolRelationTree, lg_to_srt, parse_lg_file
 from preprocessing.inkml_to_image import parse_inkml_strokes, render_inkml_to_image
 from preprocessing.export_images import export_images, find_image
+from preprocessing.paths import SampleRecord, discover_samples
+from preprocessing.pipeline import run_pipeline
 from preprocessing.lg_to_latex import (
     convert_lg_dir,
     convert_lg_file,
@@ -24,4 +26,7 @@ __all__ = [
     "latex_from_lg",
     "convert_lg_file",
     "convert_lg_dir",
+    "SampleRecord",
+    "discover_samples",
+    "run_pipeline",
 ]
