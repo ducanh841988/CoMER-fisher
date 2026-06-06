@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import shutil
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Tuple
@@ -12,20 +13,66 @@ DEFAULT_SPLIT_MAP = {
     "val": "val",
     "test": "test",
 }
-# SymLG test subfolders -> year folder under output test/
+DATA_PREFIX = "data"
+# SymLG test subfolders -> folder name under data/
 TEST_FOLDER_MAP = {
     "CROHME2019_test": "2019",
     "CROHME2023_test": "2023",
 }
-# Relative paths under preprocessing/output/dataset/
-DATASET_OUTPUT_LAYOUT = ("train", "val", "test/2019", "test/2023")
-# CoMER data.zip names when packing (val/test years for evaluation)
-COMER_ZIP_FOLDER_MAP = {
-    "train": "train",
-    "val": "2014",
-    "test/2019": "2019",
-    "test/2023": "2023",
-}
+# Relative paths under preprocessing/output/dataset/ (matches data.zip layout)
+DATASET_OUTPUT_LAYOUT = (
+    f"{DATA_PREFIX}/train",
+    f"{DATA_PREFIX}/val",
+    f"{DATA_PREFIX}/2019",
+    f"{DATA_PREFIX}/2023",
+)
+# Legacy on-disk paths from older pipeline runs -> canonical layout
+LEGACY_DATASET_PATHS: Tuple[Tuple[str, str], ...] = (
+    ("train", f"{DATA_PREFIX}/train"),
+    ("val", f"{DATA_PREFIX}/val"),
+    ("test/2019", f"{DATA_PREFIX}/2019"),
+    ("test/2023", f"{DATA_PREFIX}/2023"),
+)
+
+
+def discover_pack_sources(dataset_root: Path) -> List[Tuple[Path, str]]:
+    """Find ``data/{train,val,2019,2023}`` folders (same paths used in zip)."""
+    root = dataset_root.resolve()
+    found: List[Tuple[Path, str]] = []
+    for folder in DATASET_OUTPUT_LAYOUT:
+        src_dir = root / folder
+        if (src_dir / "caption.txt").is_file():
+            found.append((src_dir, folder))
+    return found
+
+
+def migrate_dataset_layout(dataset_root: Path, dry_run: bool = False) -> List[str]:
+    """Move legacy ``train/``, ``val/``, ``test/*`` into ``data/*`` (one-time)."""
+    root = dataset_root.resolve()
+    actions: List[str] = []
+    for src_rel, dst_rel in LEGACY_DATASET_PATHS:
+        src = root / src_rel
+        dst = root / dst_rel
+        if not src.is_dir():
+            continue
+        if not ((src / "caption.txt").is_file() or (src / "img").is_dir()):
+            continue
+        if dst.exists():
+            raise SystemExit(
+                f"Cannot move {src_rel} -> {dst_rel}: destination already exists.\n"
+                f"Remove or merge {dst} manually, then retry."
+            )
+        actions.append(f"{src_rel} -> {dst_rel}")
+        if not dry_run:
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            shutil.move(str(src), str(dst))
+    if not dry_run:
+        test_parent = root / "test"
+        if test_parent.is_dir() and not any(test_parent.iterdir()):
+            test_parent.rmdir()
+    return actions
+
+
 IMAGE_EXTENSIONS = (".png", ".bmp", ".jpg", ".jpeg")
 INKML_SUFFIX = ".inkml"
 LG_SUFFIX = ".lg"
@@ -70,11 +117,12 @@ def resolve_output_folder(
     rel_stem: Path,
     split_map: Optional[Dict[str, str]] = None,
 ) -> str:
-    """Map a sample to dataset path: train, val, or test/{2019,2023}."""
+    """Map a sample to ``data/train``, ``data/val``, ``data/2019``, or ``data/2023``."""
     split_map = split_map or DEFAULT_SPLIT_MAP
     if split == "test":
-        return f"test/{_test_year_folder(rel_stem)}"
-    return split_map.get(split, split)
+        return f"{DATA_PREFIX}/{_test_year_folder(rel_stem)}"
+    name = split_map.get(split, split)
+    return f"{DATA_PREFIX}/{name}"
 
 
 def flat_sample_id(rel_stem: Path) -> str:

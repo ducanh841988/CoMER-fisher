@@ -12,13 +12,10 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from preprocessing.paths import COMER_ZIP_FOLDER_MAP, DATASET_OUTPUT_LAYOUT
-
-# (path under output/dataset, name inside data.zip)
-DEFAULT_PACK_PAIRS: Tuple[Tuple[str, str], ...] = tuple(
-    (src, COMER_ZIP_FOLDER_MAP[src])
-    for src in DATASET_OUTPUT_LAYOUT
-    if src in COMER_ZIP_FOLDER_MAP
+from preprocessing.paths import (
+    DATASET_OUTPUT_LAYOUT,
+    discover_pack_sources,
+    migrate_dataset_layout,
 )
 
 
@@ -36,7 +33,7 @@ def _load_vocab(path: Optional[Path]) -> Optional[Set[str]]:
 
 def _filter_caption_lines(
     caption_path: Path, vocab: Optional[Set[str]]
-) -> tuple[List[str], int]:
+) -> tuple:
     """Return kept lines and count of skipped OOV samples."""
     lines = caption_path.read_text(encoding="utf-8").splitlines(keepends=True)
     if vocab is None:
@@ -59,20 +56,21 @@ def _filter_caption_lines(
 def build_data_zip(
     dataset_root: Path,
     output_zip: Path,
-    pack_pairs: Iterable[Tuple[str, str]] = DEFAULT_PACK_PAIRS,
+    sources: Optional[Iterable[Tuple[Path, str]]] = None,
     dictionary: Optional[Path] = None,
 ) -> dict:
-    """Zip dataset folders into CoMER ``data/{train,2014,2019,2023}/`` layout."""
+    """Zip ``data/{train,val,2019,2023}/`` (same layout as on disk)."""
     dataset_root = dataset_root.resolve()
+    pack_list = list(sources) if sources is not None else discover_pack_sources(dataset_root)
     output_zip.parent.mkdir(parents=True, exist_ok=True)
     vocab = _load_vocab(dictionary)
     stats: Dict[str, object] = {"folders": {}, "images": 0, "skipped_oov": 0}
 
+    if not pack_list:
+        return stats
+
     with zipfile.ZipFile(output_zip, "w", compression=zipfile.ZIP_DEFLATED) as archive:
-        for src_rel, zip_name in pack_pairs:
-            split_dir = dataset_root / src_rel
-            if not split_dir.is_dir():
-                continue
+        for split_dir, arc_prefix in pack_list:
             caption_path = split_dir / "caption.txt"
             img_dir = split_dir / "img"
             if not caption_path.is_file():
@@ -84,18 +82,17 @@ def build_data_zip(
                 continue
 
             allowed_ids = {line.split()[0] for line in lines if line.strip()}
-            archive.writestr(f"data/{zip_name}/caption.txt", "".join(lines))
+            archive.writestr(f"{arc_prefix}/caption.txt", "".join(lines))
 
             written = 0
             if img_dir.is_dir():
                 for bmp_path in sorted(img_dir.glob("*.bmp")):
                     if bmp_path.stem not in allowed_ids:
                         continue
-                    arcname = f"data/{zip_name}/img/{bmp_path.name}"
-                    archive.write(bmp_path, arcname)
+                    archive.write(bmp_path, f"{arc_prefix}/img/{bmp_path.name}")
                     written += 1
 
-            stats["folders"][zip_name] = {"captions": len(lines), "images": written}
+            stats["folders"][arc_prefix] = {"captions": len(lines), "images": written}
             stats["images"] = int(stats["images"]) + written
 
     return stats
@@ -103,13 +100,13 @@ def build_data_zip(
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Pack preprocessing/output/dataset into CoMER data.zip."
+        description="Pack dataset into CoMER data.zip (paths match on-disk layout)."
     )
     parser.add_argument(
         "--dataset",
         type=Path,
         default=Path(__file__).resolve().parent / "output" / "dataset",
-        help="Pipeline output (train/, val/, test/2019/, test/2023/)",
+        help="Root containing data/train, data/val, data/2019, data/2023",
     )
     parser.add_argument(
         "--output",
@@ -123,16 +120,56 @@ def main() -> None:
         default=None,
         help="Optional comer/datamodule/dictionary.txt to drop OOV samples",
     )
+    parser.add_argument(
+        "--migrate",
+        action="store_true",
+        default=True,
+        help="Move legacy train/val/test/* into data/* before packing (default: on)",
+    )
+    parser.add_argument(
+        "--no-migrate",
+        action="store_false",
+        dest="migrate",
+        help="Do not move legacy folders; require data/* layout",
+    )
+    parser.add_argument(
+        "--migrate-only",
+        action="store_true",
+        help="Only run layout migration, do not create zip",
+    )
     args = parser.parse_args()
 
+    dataset_root = args.dataset.resolve()
+    if args.migrate:
+        moved = migrate_dataset_layout(dataset_root)
+        for line in moved:
+            print(f"Migrated: {line}")
+
+    if args.migrate_only:
+        return
+
+    sources = discover_pack_sources(dataset_root)
+    if not sources:
+        expected = ", ".join(DATASET_OUTPUT_LAYOUT)
+        raise SystemExit(
+            f"No caption.txt under {dataset_root}\n"
+            f"Expected folders: {expected}\n"
+            f"Run: bash preprocessing/run_pipeline.sh\n"
+            f"Or migrate legacy output: python preprocessing/build_data_zip.py --migrate-only"
+        )
+
     stats = build_data_zip(
-        dataset_root=args.dataset,
+        dataset_root=dataset_root,
         output_zip=args.output,
+        sources=sources,
         dictionary=args.dictionary.resolve() if args.dictionary else None,
     )
+    if not stats["folders"]:
+        raise SystemExit("No samples packed (empty captions or missing images).")
+
     print(f"Wrote {args.output.resolve()}")
     for folder, counts in stats["folders"].items():
-        print(f"  data/{folder}: captions={counts['captions']} images={counts['images']}")
+        print(f"  {folder}: captions={counts['captions']} images={counts['images']}")
     if stats["skipped_oov"]:
         print(f"  skipped_oov={stats['skipped_oov']}")
 

@@ -41,7 +41,7 @@ while [[ $# -gt 0 ]]; do
 Run unified preprocessing pipeline.
 
 Reads SymLG/*.lg, maps to IMG or INKML by path/stem, exports CoMER-format:
-  train/, val/, test/2019/, test/2023/
+  data/train, data/val, data/2019, data/2023/
   each with caption.txt and img/{sample_id}.bmp
 
 Environment:
@@ -83,4 +83,5 @@ python preprocessing/pipeline.py \
 
 echo
 echo "Done. Dataset under: $OUT_ROOT"
-echo "Pack for CoMER: python preprocessing/build_data_zip.py --dataset $OUT_ROOT --output $ROOT/data.zip"
+echo "Pack for CoMER: bash preprocessing/run_build_data_zip.sh"
+echo "  (or: DATASET=$OUT_ROOT OUT_ZIP=$ROOT/data.zip bash preprocessing/run_build_data_zip.sh)"

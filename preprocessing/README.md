@@ -33,7 +33,7 @@ The unified pipeline (`paths.py` + `pipeline.py`):
 1. Walk all **SymLG** `.lg` files (train / val / test).
 2. Map each LG to **IMG** or **INKML** by relative path, then by filename stem (folder names may differ, e.g. `CROHME2023_train` vs `CROHME2013_train`).
 3. **Multiprocess**: LG → space-tokenized LaTeX; IMG crop or INKML render → BMP (max side 1000 px).
-4. Write dataset layout: `train/`, `val/`, `test/2019/`, `test/2023/` (each with `caption.txt` and `img/*.bmp`; test not merged).
+4. Write `data/train`, `data/val`, `data/2019`, `data/2023` (test years separate, not merged).
 
 | Step | Command | Output |
 |------|---------|--------|
@@ -67,9 +67,15 @@ python preprocessing/pipeline.py \
 Pack into CoMER `data.zip`:
 
 ```bash
-python preprocessing/build_data_zip.py \
-  --dataset preprocessing/output/dataset \
-  --output data.zip
+bash preprocessing/run_build_data_zip.sh
+# or: OUT_ZIP=data_2023.zip bash preprocessing/run_build_data_zip.sh
+```
+
+On-disk paths match the zip (`data/train`, `data/val`, `data/2019`, `data/2023`). If you have an older run under `train/`, `val/`, `test/2019/`, migrate once:
+
+```bash
+python preprocessing/migrate_dataset_layout.py
+# or: bash preprocessing/run_build_data_zip.sh  (migrates automatically before zipping)
 ```
 
 Optional: drop samples with tokens not in `comer/datamodule/dictionary.txt`:
@@ -82,16 +88,15 @@ Output layout (matches `comer/datamodule/datamodule.py`):
 
 ```
 preprocessing/output/dataset/
-├── train/
-│   ├── caption.txt
-│   └── img/*.bmp
-├── val/
-├── test/
-│   ├── 2019/             # CROHME2019_test (not combined with 2023)
-│   └── 2023/             # CROHME2023_test
+└── data/
+    ├── train/
+    ├── val/
+    ├── 2019/               # CROHME2019_test
+    └── 2023/               # CROHME2023_test
+    (each: caption.txt + img/*.bmp)
 ```
 
-`build_data_zip.py` maps this to CoMER zip names: `train`, `2014` (val), `2019`, `2023`.
+`build_data_zip.py` zips the same paths into `data.zip` (no remapping).
 
 ## Legacy steps (optional)
 
@@ -177,10 +182,7 @@ python preprocessing/analyze_images.py
 
 ```
 preprocessing/output/
-├── dataset/               # unified pipeline
-│   ├── train/
-│   ├── val/
-│   └── test/{2019,2023}/
+├── dataset/data/          # unified pipeline (train, val, 2019, 2023)
 ├── lg/                    # legacy LaTeX labels (.tex)
 ├── img/                   # legacy PNG images
 └── analysis/

@@ -265,7 +265,7 @@ def main() -> None:
         "--output",
         type=Path,
         default=Path(__file__).resolve().parent / "output" / "dataset",
-        help="Output: train/, val/, test/2019/, test/2023/ each with caption.txt and img/",
+        help="Output root; writes data/train, data/val, data/2019, data/2023 under it",
     )
     parser.add_argument("--map", type=Path, default=DEFAULT_MAP, help="symLG_map.csv")
     parser.add_argument("--workers", type=int, default=default_workers())
