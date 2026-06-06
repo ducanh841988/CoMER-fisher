@@ -8,7 +8,7 @@ from pytorch_lightning import Trainer, seed_everything
 seed_everything(7)
 
 
-def main(version: str, test_year: str):
+def main(version: str, test_path: str):
     # generate output latex in result.zip
     ckp_folder = os.path.join("lightning_logs", f"version_{version}", "checkpoints")
     fnames = os.listdir(ckp_folder)
@@ -18,7 +18,13 @@ def main(version: str, test_year: str):
 
     trainer = Trainer(logger=False, gpus=1)
 
-    dm = CROHMEDatamodule(test_year=test_year, eval_batch_size=4)
+    # train/val paths unused when only running test; test_path selects the eval split
+    dm = CROHMEDatamodule(
+        train_path=test_path,
+        val_path=test_path,
+        test_path=test_path,
+        eval_batch_size=4,
+    )
 
     model = LitCoMER.load_from_checkpoint(ckp_path)
 

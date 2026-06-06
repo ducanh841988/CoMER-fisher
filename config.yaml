@@ -55,8 +55,9 @@ model:
   pretrained_ckpt: #lightning_logs/version_0/checkpoints/epoch=151-step=57151-val_ExpRate=0.6365.ckpt
   #pretrained_ckpt: lightning_logs/version_5/checkpoints/epoch=33-step=22065-val_ExpRate=0.5299.ckpt
 data:
-  zipfile_path: data.zip
-  test_year: 2014
+  train_path: preprocessing/output/dataset/data/train
+  val_path: preprocessing/output/dataset/data/val
+  # test_path: preprocessing/output/dataset/data/2023  # optional; defaults to val_path
   train_batch_size: 8
   eval_batch_size: 4
   num_workers: 5

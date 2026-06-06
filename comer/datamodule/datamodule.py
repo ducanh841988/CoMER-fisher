@@ -1,106 +1,13 @@
-import os
 from dataclasses import dataclass
-from typing import List, Optional, Tuple
-from zipfile import ZipFile
+from typing import List, Optional
 
-import numpy as np
 import pytorch_lightning as pl
 import torch
-from comer.datamodule.dataset import CROHMEDataset
-from PIL import Image
+from comer.datamodule.dataset import CROHMEDataset, build_lazy_dataset
 from torch import FloatTensor, LongTensor
 from torch.utils.data.dataloader import DataLoader
 
 from .vocab import vocab
-
-Data = List[Tuple[str, Image.Image, List[str]]]
-
-MAX_SIZE = 32e4  # change here accroading to your GPU memory
-
-# load data
-def data_iterator(
-    data: Data,
-    batch_size: int,
-    batch_Imagesize: int = MAX_SIZE,
-    maxlen: int = 200,
-    maxImagesize: int = MAX_SIZE,
-):
-    fname_batch = []
-    feature_batch = []
-    label_batch = []
-    feature_total = []
-    label_total = []
-    fname_total = []
-    biggest_image_size = 0
-
-    data.sort(key=lambda x: x[1].size[0] * x[1].size[1])
-
-    i = 0
-    for fname, fea, lab in data:
-        size = fea.size[0] * fea.size[1]
-        fea = np.array(fea)
-        if size > biggest_image_size:
-            biggest_image_size = size
-        batch_image_size = biggest_image_size * (i + 1)
-        if len(lab) > maxlen:
-            print("sentence", i, "length bigger than", maxlen, "ignore")
-        elif size > maxImagesize:
-            print(
-                f"image: {fname} size: {fea.shape[0]} x {fea.shape[1]} =  bigger than {maxImagesize}, ignore"
-            )
-        else:
-            if batch_image_size > batch_Imagesize or i == batch_size:  # a batch is full
-                fname_total.append(fname_batch)
-                feature_total.append(feature_batch)
-                label_total.append(label_batch)
-                i = 0
-                biggest_image_size = size
-                fname_batch = []
-                feature_batch = []
-                label_batch = []
-                fname_batch.append(fname)
-                feature_batch.append(fea)
-                label_batch.append(lab)
-                i += 1
-            else:
-                fname_batch.append(fname)
-                feature_batch.append(fea)
-                label_batch.append(lab)
-                i += 1
-
-    # last batch
-    fname_total.append(fname_batch)
-    feature_total.append(feature_batch)
-    label_total.append(label_batch)
-    print("total ", len(feature_total), "batch data loaded")
-    return list(zip(fname_total, feature_total, label_total))
-
-
-def extract_data(archive: ZipFile, dir_name: str) -> Data:
-    """Extract all data need for a dataset from zip archive
-
-    Args:
-        archive (ZipFile):
-        dir_name (str): dir name in archive zip (eg: train, test_2014......)
-
-    Returns:
-        Data: list of tuple of image and formula
-    """
-    with archive.open(f"data/{dir_name}/caption.txt", "r") as f:
-        captions = f.readlines()
-    data = []
-    for line in captions:
-        tmp = line.decode().strip().split()
-        img_name = tmp[0]
-        formula = tmp[1:]
-        with archive.open(f"data/{dir_name}/img/{img_name}.bmp", "r") as f:
-            # move image to memory immediately, avoid lazy loading, which will lead to None pointer error in loading
-            img = Image.open(f).copy()
-        data.append((img_name, img, formula))
-
-    print(f"Extract data from: {dir_name}, with data size: {len(data)}")
-
-    return data
 
 
 @dataclass
@@ -142,55 +49,55 @@ def collate_fn(batch):
         x[idx, :, : heights_x[idx], : widths_x[idx]] = s_x
         x_mask[idx, : heights_x[idx], : widths_x[idx]] = 0
 
-    # return fnames, x, x_mask, seqs_y
     return Batch(fnames, x, x_mask, seqs_y)
-
-
-def build_dataset(archive, folder: str, batch_size: int):
-    data = extract_data(archive, folder)
-    return data_iterator(data, batch_size)
 
 
 class CROHMEDatamodule(pl.LightningDataModule):
     def __init__(
         self,
-        zipfile_path: str = f"{os.path.dirname(os.path.realpath(__file__))}/../../data.zip",
-        test_year: str = "2014",
+        train_path: str,
+        val_path: str,
+        test_path: Optional[str] = None,
         train_batch_size: int = 8,
         eval_batch_size: int = 4,
         num_workers: int = 5,
         scale_aug: bool = False,
     ) -> None:
         super().__init__()
-        assert isinstance(test_year, str)
-        self.zipfile_path = zipfile_path
-        self.test_year = test_year
+        self.train_path = train_path
+        self.val_path = val_path
+        self.test_path = test_path or val_path
         self.train_batch_size = train_batch_size
         self.eval_batch_size = eval_batch_size
         self.num_workers = num_workers
         self.scale_aug = scale_aug
 
-        print(f"Load data from: {self.zipfile_path}")
+        print(f"Load train from: {self.train_path}")
+        print(f"Load val from: {self.val_path}")
+        if self.test_path != self.val_path:
+            print(f"Load test from: {self.test_path}")
+
+    def _make_dataset(self, data_path: str, batch_size: int, is_train: bool):
+        samples, batch_indices = build_lazy_dataset(data_path, batch_size)
+        return CROHMEDataset(
+            samples,
+            batch_indices,
+            is_train=is_train,
+            scale_aug=self.scale_aug,
+        )
 
     def setup(self, stage: Optional[str] = None) -> None:
-        with ZipFile(self.zipfile_path) as archive:
-            if stage == "fit" or stage is None:
-                self.train_dataset = CROHMEDataset(
-                    build_dataset(archive, "train", self.train_batch_size),
-                    True,
-                    self.scale_aug,
-                )
-                self.val_dataset = CROHMEDataset(
-                    build_dataset(archive, self.test_year, self.eval_batch_size),
-                    False,
-                    self.scale_aug,
-                )
-            if stage == "test" or stage is None:
-                self.test_dataset = CROHMEDataset(
-                    build_dataset(archive, self.test_year, self.eval_batch_size),
-                    False,
-                    self.scale_aug,
-                )
+        if stage == "fit" or stage is None:
+            self.train_dataset = self._make_dataset(
+                self.train_path, self.train_batch_size, is_train=True
+            )
+            self.val_dataset = self._make_dataset(
+                self.val_path, self.eval_batch_size, is_train=False
+            )
+        if stage == "test" or stage is None:
+            self.test_dataset = self._make_dataset(
+                self.test_path, self.eval_batch_size, is_train=False
+            )
 
     def train_dataloader(self):
         return DataLoader(
