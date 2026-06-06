@@ -2,6 +2,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Tuple, Union
 
+import numpy as np
 import torchvision.transforms as tr
 from PIL import Image
 from torch.utils.data.dataset import Dataset
@@ -172,7 +173,7 @@ class CROHMEDataset(Dataset):
         for sample_idx in indices:
             sample = self.samples[sample_idx]
             with Image.open(sample.img_path) as img:
-                img = img.copy()
+                img = np.array(img.convert("L").copy())
             fnames.append(sample.img_name)
             imgs.append(self.transform(img))
             captions.append(list(sample.formula))

@@ -15,11 +15,12 @@ trainer:
         monitor: val_ExpRate
         mode: max
         filename: '{epoch}-{step}-{val_ExpRate:.4f}'
-  gpus: 0,1  # PL 1.4: use cuda:0 and cuda:1
+  gpus: 1 #0,1  # PL 1.4: use cuda:0 and cuda:1
   accelerator: ddp
   # gpus: 1
-  check_val_every_n_epoch: 2
-  max_epochs: 300
+  check_val_every_n_epoch: 1
+  val_check_interval: 2500
+  max_epochs: 20
   gradient_clip_val: 1.0
   deterministic: true
 model:
@@ -37,13 +38,13 @@ model:
   self_coverage: true
   # beam search
   beam_size: 10
-  max_len: 200
+  max_len: 50
   alpha: 1.0
   early_stopping: false
   temperature: 1.0
   # training
   learning_rate: 0.08
-  patience: 20
+  patience: 10
   # fisher loss
   use_fisher_loss: false
   lambda_fisher: 0.1
@@ -52,12 +53,11 @@ model:
   fisher_ignore_special_tokens: true
   learn_layer_weight: true
   # load CoMER weights only; Fisher head is randomly initialized
-  pretrained_ckpt: #lightning_logs/version_0/checkpoints/epoch=151-step=57151-val_ExpRate=0.6365.ckpt
-  #pretrained_ckpt: lightning_logs/version_5/checkpoints/epoch=33-step=22065-val_ExpRate=0.5299.ckpt
+  pretrained_ckpt:
 data:
   train_path: preprocessing/output/dataset/data/train
   val_path: preprocessing/output/dataset/data/val
-  # test_path: preprocessing/output/dataset/data/2023  # optional; defaults to val_path
+  test_path: preprocessing/output/dataset/data/2023
   train_batch_size: 8
   eval_batch_size: 4
   num_workers: 5
