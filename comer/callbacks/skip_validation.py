@@ -42,6 +42,13 @@ class SkipValidationOnHighTrainLoss(Callback):
             return None
         return float(metric)
 
+    def _restore_val_batches(self, trainer: Trainer) -> None:
+        if not self._skipped:
+            return
+        trainer.limit_val_batches = self._original_limit_val_batches
+        self._skipped = False
+        self._original_limit_val_batches = None
+
     def on_train_batch_end(
         self,
         trainer: Trainer,
@@ -51,6 +58,10 @@ class SkipValidationOnHighTrainLoss(Callback):
         batch_idx: int,
         dataloader_idx: int,
     ) -> None:
+        # PL calls on_skip() (not on_validation_epoch_end) when limit_val_batches=0,
+        # so restore on the next batch before any new val-check decision.
+        self._restore_val_batches(trainer)
+
         if not self._should_validate(trainer, batch_idx):
             return
 
@@ -63,16 +74,13 @@ class SkipValidationOnHighTrainLoss(Callback):
             trainer.limit_val_batches = 0
             self._skipped = True
             rank_zero_info(
-                "Skipping validation at epoch %d: %s=%.4f > %.4f",
+                "Skipping validation at epoch %d step %d: %s=%.4f > %.4f",
                 trainer.current_epoch,
+                trainer.global_step,
                 self.monitor,
                 train_loss,
                 self.threshold,
             )
 
     def on_validation_epoch_end(self, trainer: Trainer, pl_module) -> None:
-        if not self._skipped:
-            return
-        trainer.limit_val_batches = self._original_limit_val_batches
-        self._skipped = False
-        self._original_limit_val_batches = None
+        self._restore_val_batches(trainer)
