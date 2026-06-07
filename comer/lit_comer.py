@@ -273,7 +273,8 @@ class LitCoMER(pl.LightningModule):
             "monitor": "val_ExpRate",
             "interval": "epoch",
             "frequency": self.trainer.check_val_every_n_epoch,
-            "strict": True,
+            # Skip LR update when validation is skipped (no val_ExpRate logged).
+            "strict": False,
         }
 
         return {"optimizer": optimizer, "lr_scheduler": scheduler}

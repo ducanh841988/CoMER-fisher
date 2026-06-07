@@ -5,6 +5,10 @@ trainer:
     - class_path: pytorch_lightning.callbacks.LearningRateMonitor
       init_args:
         logging_interval: epoch
+    - class_path: comer.callbacks.skip_validation.SkipValidationOnHighTrainLoss
+      init_args:
+        threshold: 1.0
+        monitor: train_loss
     - class_path: pytorch_lightning.callbacks.ModelCheckpoint
       init_args:
         save_top_k: 1
