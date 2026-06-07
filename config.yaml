@@ -11,7 +11,7 @@ trainer:
         monitor: val_ExpRate
         mode: max
         filename: '{epoch}-{step}-{val_ExpRate:.4f}'
-  gpus: 1 #0,1  # PL 1.4: use cuda:0 and cuda:1
+  gpus: 0,1  # PL 1.4: use cuda:0 and cuda:1
   accelerator: ddp
   # gpus: 1
   val_check_interval: 2500
@@ -32,7 +32,7 @@ model:
   cross_coverage: true
   self_coverage: true
   # beam search
-  beam_size: 10
+  beam_size: 5
   max_len: 50
   alpha: 1.0
   early_stopping: false
@@ -40,11 +40,11 @@ model:
   # training
   learning_rate: 0.08
   patience: 20
-  val_start_epoch: 1  # skip validation while current_epoch < this (0 = from the start)
+  val_start_epoch: 5  # skip validation while current_epoch < this (0 = from the start)
   # fisher loss
-  use_fisher_loss: false
+  use_fisher_loss: true
   lambda_fisher: 0.1
-  fisher_warmup_epoch: 2
+  fisher_warmup_epoch: 5
   fisher_proj_dim: 128
   fisher_ignore_special_tokens: true
   learn_layer_weight: true
