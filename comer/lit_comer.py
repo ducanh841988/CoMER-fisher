@@ -81,6 +81,7 @@ class LitCoMER(pl.LightningModule):
 
         self.exprate_recorder = ExpRateRecorder()
         self._original_limit_val_batches: Optional[Union[int, float]] = None
+        self._lr_scheduler: Optional[optim.lr_scheduler.ReduceLROnPlateau] = None
 
     def on_train_epoch_start(self) -> None:
         device = self.device
@@ -95,6 +96,16 @@ class LitCoMER(pl.LightningModule):
             self.trainer.limit_val_batches = 0
         elif self._original_limit_val_batches is not None:
             self.trainer.limit_val_batches = self._original_limit_val_batches
+
+    def on_train_epoch_end(self) -> None:
+        if self.trainer is None or self._lr_scheduler is None:
+            return
+        if self.trainer.current_epoch < self.hparams.val_start_epoch:
+            return
+        metric = self.trainer.callback_metrics.get("val_ExpRate")
+        if metric is None:
+            return
+        self._lr_scheduler.step(float(metric))
 
     def _accumulate_epoch_train_loss(self, loss: torch.Tensor) -> None:
         self._epoch_loss_sum = self._epoch_loss_sum + loss.detach()
@@ -273,19 +284,11 @@ class LitCoMER(pl.LightningModule):
             weight_decay=1e-4,
         )
 
-        reduce_scheduler = optim.lr_scheduler.ReduceLROnPlateau(
+        val_every = max(1, self.trainer.check_val_every_n_epoch)
+        self._lr_scheduler = optim.lr_scheduler.ReduceLROnPlateau(
             optimizer,
             mode="max",
             factor=0.25,
-            patience=self.hparams.patience // self.trainer.check_val_every_n_epoch,
+            patience=self.hparams.patience // val_every,
         )
-        scheduler = {
-            "scheduler": reduce_scheduler,
-            "monitor": "val_ExpRate",
-            "interval": "epoch",
-            "frequency": self.trainer.check_val_every_n_epoch,
-            # Skip LR update when validation is skipped (no val_ExpRate logged).
-            "strict": False,
-        }
-
-        return {"optimizer": optimizer, "lr_scheduler": scheduler}
+        return optimizer
