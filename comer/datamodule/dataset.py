@@ -83,6 +83,7 @@ def build_batch_indices(
     max_imagesize: float = MAX_SIZE,
     max_width: int = DEFAULT_MAX_WIDTH,
     max_height: int = DEFAULT_MAX_HEIGHT,
+    filter_samples: bool = True,
 ) -> List[List[int]]:
     """Group sample indices into batches by sorted image area (same logic as before)."""
     order = sorted(range(len(samples)), key=lambda i: samples[i].area)
@@ -96,20 +97,21 @@ def build_batch_indices(
         sample = samples[idx]
         size = sample.area
 
-        if len(sample.formula) > maxlen:
-            print("sentence", idx, "length bigger than", maxlen, "ignore")
-            continue
-        if size > max_imagesize:
-            print(
-                f"image: {sample.img_name} size bigger than {max_imagesize}, ignore"
-            )
-            continue
-        if sample.width > max_width or sample.height > max_height:
-            print(
-                f"image: {sample.img_name} size: {sample.width} x {sample.height} "
-                f"exceeds max {max_width} x {max_height}, ignore"
-            )
-            continue
+        if filter_samples:
+            if len(sample.formula) > maxlen:
+                print("sentence", idx, "length bigger than", maxlen, "ignore")
+                continue
+            if size > max_imagesize:
+                print(
+                    f"image: {sample.img_name} size bigger than {max_imagesize}, ignore"
+                )
+                continue
+            if sample.width > max_width or sample.height > max_height:
+                print(
+                    f"image: {sample.img_name} size: {sample.width} x {sample.height} "
+                    f"exceeds max {max_width} x {max_height}, ignore"
+                )
+                continue
 
         if size > biggest_image_size:
             biggest_image_size = size
@@ -135,9 +137,12 @@ def build_batch_indices(
 def build_lazy_dataset(
     data_dir: Union[str, Path],
     batch_size: int,
+    filter_samples: bool = True,
 ) -> Tuple[List[SampleRecord], List[List[int]]]:
     samples = load_sample_index(data_dir)
-    batch_indices = build_batch_indices(samples, batch_size)
+    batch_indices = build_batch_indices(
+        samples, batch_size, filter_samples=filter_samples
+    )
     return samples, batch_indices
 
 

@@ -5,10 +5,6 @@ trainer:
     - class_path: pytorch_lightning.callbacks.LearningRateMonitor
       init_args:
         logging_interval: epoch
-    - class_path: comer.callbacks.skip_validation.SkipValidationOnHighTrainLoss
-      init_args:
-        threshold: 1.0
-        monitor: train_loss
     - class_path: pytorch_lightning.callbacks.ModelCheckpoint
       init_args:
         save_top_k: 1
@@ -18,9 +14,8 @@ trainer:
   gpus: 1 #0,1  # PL 1.4: use cuda:0 and cuda:1
   accelerator: ddp
   # gpus: 1
-  check_val_every_n_epoch: 1
   val_check_interval: 2500
-  max_epochs: 20
+  max_epochs: 30
   gradient_clip_val: 1.0
   deterministic: true
 model:
@@ -44,11 +39,11 @@ model:
   temperature: 1.0
   # training
   learning_rate: 0.08
-  patience: 10
+  patience: 20
   # fisher loss
   use_fisher_loss: false
   lambda_fisher: 0.1
-  fisher_warmup_epoch: 0
+  fisher_warmup_epoch: 2
   fisher_proj_dim: 128
   fisher_ignore_special_tokens: true
   learn_layer_weight: true

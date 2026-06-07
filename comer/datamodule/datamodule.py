@@ -78,7 +78,9 @@ class CROHMEDatamodule(pl.LightningDataModule):
             print(f"Load test from: {self.test_path}")
 
     def _make_dataset(self, data_path: str, batch_size: int, is_train: bool):
-        samples, batch_indices = build_lazy_dataset(data_path, batch_size)
+        samples, batch_indices = build_lazy_dataset(
+            data_path, batch_size, filter_samples=is_train
+        )
         return CROHMEDataset(
             samples,
             batch_indices,
