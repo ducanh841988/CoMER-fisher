@@ -40,6 +40,7 @@ class LitCoMER(pl.LightningModule):
         # training
         learning_rate: float,
         patience: int,
+        val_start_epoch: int = 1,
         # fisher loss
         use_fisher_loss: bool = False,
         lambda_fisher: float = 0.0,
@@ -79,11 +80,21 @@ class LitCoMER(pl.LightningModule):
             )
 
         self.exprate_recorder = ExpRateRecorder()
+        self._original_limit_val_batches: Optional[Union[int, float]] = None
 
     def on_train_epoch_start(self) -> None:
         device = self.device
         self._epoch_loss_sum = torch.zeros((), device=device)
         self._epoch_loss_count = torch.zeros((), device=device)
+
+        if self.trainer is None:
+            return
+        if self.trainer.current_epoch < self.hparams.val_start_epoch:
+            if self._original_limit_val_batches is None:
+                self._original_limit_val_batches = self.trainer.limit_val_batches
+            self.trainer.limit_val_batches = 0
+        elif self._original_limit_val_batches is not None:
+            self.trainer.limit_val_batches = self._original_limit_val_batches
 
     def _accumulate_epoch_train_loss(self, loss: torch.Tensor) -> None:
         self._epoch_loss_sum = self._epoch_loss_sum + loss.detach()
