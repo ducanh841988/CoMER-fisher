@@ -6,10 +6,17 @@ import argparse
 import csv
 import json
 import statistics
+import sys
 from collections import Counter
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Set
+
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from preprocessing.paths import discover_dataset_splits
 
 SPLITS = ("train", "val", "test")
 
@@ -46,20 +53,40 @@ def iter_tex_files(root: Path, split: str) -> Iterable[Path]:
     yield from sorted(split_dir.rglob("*.tex"))
 
 
+def iter_caption_tokens(root: Path, split: str) -> Iterable[List[str]]:
+    caption_path = root / split / "caption.txt"
+    if not caption_path.is_file():
+        return
+    for line in caption_path.read_text(encoding="utf-8", errors="replace").splitlines():
+        parts = line.strip().split()
+        if len(parts) >= 2:
+            yield parts[1:]
+
+
 def analyze_split(root: Path, split: str) -> SplitAnalysis:
     lengths: List[int] = []
     freq: Counter[str] = Counter()
     num_files = 0
     empty_files = 0
 
-    for tex_path in iter_tex_files(root, split):
-        num_files += 1
-        tokens = tokenize_latex(tex_path.read_text(encoding="utf-8", errors="replace"))
-        if not tokens:
-            empty_files += 1
-            continue
-        lengths.append(len(tokens))
-        freq.update(tokens)
+    caption_path = root / split / "caption.txt"
+    if caption_path.is_file():
+        for tokens in iter_caption_tokens(root, split):
+            num_files += 1
+            if not tokens:
+                empty_files += 1
+                continue
+            lengths.append(len(tokens))
+            freq.update(tokens)
+    else:
+        for tex_path in iter_tex_files(root, split):
+            num_files += 1
+            tokens = tokenize_latex(tex_path.read_text(encoding="utf-8", errors="replace"))
+            if not tokens:
+                empty_files += 1
+                continue
+            lengths.append(len(tokens))
+            freq.update(tokens)
 
     length_stats = LengthStats()
     if lengths:
@@ -84,9 +111,10 @@ def analyze_split(root: Path, split: str) -> SplitAnalysis:
 
 def analyze_dataset(
     root: Path,
-    splits: Iterable[str] = SPLITS,
+    splits: Optional[Iterable[str]] = None,
 ) -> Dict[str, SplitAnalysis]:
-    return {split: analyze_split(root, split) for split in splits}
+    split_names = tuple(splits) if splits is not None else discover_dataset_splits(root)
+    return {split: analyze_split(root, split) for split in split_names}
 
 
 def combined_vocab(analyses: Dict[str, SplitAnalysis]) -> Set[str]:
@@ -213,8 +241,8 @@ def main() -> None:
     parser.add_argument(
         "--input",
         type=Path,
-        default=Path(__file__).resolve().parent / "output" / "lg",
-        help="Root with train/, val/, test/ subfolders of .tex files",
+        default=Path(__file__).resolve().parent / "output" / "dataset" / "data",
+        help="Dataset data/ root with {train,val,...}/caption.txt (or legacy .tex folders)",
     )
     parser.add_argument(
         "--output",
@@ -237,11 +265,11 @@ def main() -> None:
     top_k = args.top_k if args.top_k > 0 else None
     analyses = analyze_dataset(root)
 
-    for split in SPLITS:
-        if (root / split).is_dir():
-            _print_split_report(analyses[split])
-        else:
-            print(f"=== {split} === (missing)\n")
+    if not analyses:
+        raise SystemExit(f"No splits found under {root}")
+
+    for split, data in analyses.items():
+        _print_split_report(data)
 
     all_vocab = combined_vocab(analyses)
     print("=== combined (train + val + test) ===")

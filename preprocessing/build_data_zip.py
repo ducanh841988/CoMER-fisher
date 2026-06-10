@@ -154,8 +154,8 @@ def main() -> None:
         raise SystemExit(
             f"No caption.txt under {dataset_root}\n"
             f"Expected folders: {expected}\n"
-            f"Run: bash preprocessing/run_pipeline.sh\n"
-            f"Or migrate legacy output: python preprocessing/build_data_zip.py --migrate-only"
+            f"Run: bash preprocessing/make_dataset.sh\n"
+            f"Or migrate legacy output: bash preprocessing/make_dataset.sh --zip --migrate-only"
         )
 
     stats = build_data_zip(

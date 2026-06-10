@@ -46,6 +46,25 @@ def discover_pack_sources(dataset_root: Path) -> List[Tuple[Path, str]]:
     return found
 
 
+def discover_dataset_splits(root: Path) -> Tuple[str, ...]:
+    """Return split folder names under ``data/{train,...}`` or legacy ``train/`` layout."""
+    root = root.resolve()
+    if not root.is_dir():
+        return ()
+    found = tuple(
+        p.name
+        for p in sorted(root.iterdir())
+        if p.is_dir()
+        and ((p / "caption.txt").is_file() or (p / "img").is_dir())
+    )
+    if found:
+        return found
+    data_dir = root / DATA_PREFIX
+    if data_dir.is_dir() and data_dir != root:
+        return discover_dataset_splits(data_dir)
+    return tuple(s for s in SPLITS if (root / s).is_dir())
+
+
 def migrate_dataset_layout(dataset_root: Path, dry_run: bool = False) -> List[str]:
     """Move legacy ``train/``, ``val/``, ``test/*`` into ``data/*`` (one-time)."""
     root = dataset_root.resolve()

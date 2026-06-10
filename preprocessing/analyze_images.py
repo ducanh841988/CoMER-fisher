@@ -6,9 +6,14 @@ import argparse
 import csv
 import json
 import statistics
+import sys
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Tuple
+
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 
 import matplotlib.pyplot as plt
 
@@ -21,6 +26,8 @@ try:
     from tqdm import tqdm
 except ImportError:  # pragma: no cover
     tqdm = None
+
+from preprocessing.paths import discover_dataset_splits
 
 SPLITS = ("train", "val", "test")
 IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".bmp", ".webp"}
@@ -55,7 +62,8 @@ def iter_image_files(root: Path, split: str) -> Iterable[Path]:
     split_dir = root / split
     if not split_dir.is_dir():
         return
-    for path in sorted(split_dir.rglob("*")):
+    search_root = split_dir / "img" if (split_dir / "img").is_dir() else split_dir
+    for path in sorted(search_root.rglob("*")):
         if path.suffix.lower() in IMAGE_EXTENSIONS:
             yield path
 
@@ -125,9 +133,7 @@ def scan_images(
 def analyze_dataset(root: Path, show_progress: bool = True) -> Tuple[List[dict], Dict[str, SplitImageAnalysis]]:
     all_rows: List[dict] = []
     analyses: Dict[str, SplitImageAnalysis] = {}
-    for split in SPLITS:
-        if not (root / split).is_dir():
-            continue
+    for split in discover_dataset_splits(root):
         rows, analysis = scan_images(root, split, show_progress=show_progress)
         all_rows.extend(rows)
         analyses[split] = analysis
@@ -268,8 +274,8 @@ def main() -> None:
     parser.add_argument(
         "--input",
         type=Path,
-        default=Path(__file__).resolve().parent / "output" / "img",
-        help="Image root with train/, val/, test/ subfolders",
+        default=Path(__file__).resolve().parent / "output" / "dataset" / "data",
+        help="Dataset data/ root with {train,val,...}/img/*.bmp (or legacy flat image folders)",
     )
     parser.add_argument(
         "--output",
@@ -287,7 +293,7 @@ def main() -> None:
 
     rows, analyses = analyze_dataset(root, show_progress=not args.no_progress)
     if not rows:
-        raise SystemExit(f"No images found under {root}/{{train,val,test}}")
+        raise SystemExit(f"No images found under {root}")
 
     print_report(analyses)
 
