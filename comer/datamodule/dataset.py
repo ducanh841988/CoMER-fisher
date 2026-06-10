@@ -18,9 +18,9 @@ W_LO = 16
 W_HI = 1024
 
 MAX_SIZE = 32e4
-MAX_FORMULA_LEN = 200
-DEFAULT_MAX_WIDTH = 400
-DEFAULT_MAX_HEIGHT = 200
+MAX_FORMULA_LEN = 100
+DEFAULT_MAX_WIDTH = 300
+DEFAULT_MAX_HEIGHT = 600
 
 
 @dataclass(frozen=True)
@@ -97,10 +97,10 @@ def build_batch_indices(
         sample = samples[idx]
         size = sample.area
 
+        if len(sample.formula) > maxlen:
+            print("sentence", idx, "length bigger than", maxlen, "ignore")
+            continue
         if filter_samples:
-            if len(sample.formula) > maxlen:
-                print("sentence", idx, "length bigger than", maxlen, "ignore")
-                continue
             if size > max_imagesize:
                 print(
                     f"image: {sample.img_name} size bigger than {max_imagesize}, ignore"

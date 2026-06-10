@@ -14,8 +14,9 @@ trainer:
   gpus: 0,1  # PL 1.4: use cuda:0 and cuda:1
   accelerator: ddp
   # gpus: 1
-  val_check_interval: 2500
-  max_epochs: 30
+  #val_check_interval: 2500
+  check_val_every_n_epoch: 2
+  max_epochs: 300
   gradient_clip_val: 1.0
   deterministic: true
 model:
@@ -51,9 +52,9 @@ model:
   # load CoMER weights only; Fisher head is randomly initialized
   pretrained_ckpt:
 data:
-  train_path: preprocessing/output/dataset/data/train
-  val_path: preprocessing/output/dataset/data/val
-  test_path: preprocessing/output/dataset/data/2023
+  train_path: data/train
+  val_path: data/2014
+  test_path: data/2016
   train_batch_size: 8
   eval_batch_size: 4
   num_workers: 5

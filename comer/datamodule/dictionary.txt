@@ -2,6 +2,7 @@
 (
 )
 +
+,
 -
 .
 /
@@ -15,11 +16,12 @@
 7
 8
 9
+<
 =
+>
 A
 B
 C
-COMMA
 E
 F
 G
@@ -37,8 +39,11 @@ X
 Y
 [
 \Delta
+\Pi
 \alpha
 \beta
+\cdot
+\cdots
 \cos
 \div
 \exists
@@ -46,7 +51,6 @@ Y
 \frac
 \gamma
 \geq
-\gt
 \in
 \infty
 \int
@@ -54,8 +58,8 @@ Y
 \ldots
 \leq
 \lim
+\limits
 \log
-\lt
 \mu
 \neq
 \phi
@@ -104,4 +108,3 @@ z
 {
 |
 }
-∣
