@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import argparse
-import shutil
 import sys
 from collections import defaultdict
 from dataclasses import dataclass, field
@@ -17,7 +16,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from preprocessing.batch_utils import default_workers, run_parallel, summarize_results
-from preprocessing.image_crop import crop_to_content, scale_to_max_size
+from preprocessing.image_crop import export_comer_image, scale_to_max_size
 from preprocessing.inkml_to_image import DEFAULT_MAX_IMAGE_SIZE, render_inkml_to_image
 from preprocessing.lg_to_latex import DEFAULT_MAP, latex_from_lg
 from preprocessing.paths import (
@@ -68,15 +67,21 @@ def _export_visual(
     if record.img_path is not None and record.img_path.is_file():
         margin = max(0, int(round(padding)))
         if crop:
-            crop_to_content(
+            export_comer_image(
                 record.img_path,
                 png_path,
                 margin=margin,
+                crop=True,
                 max_image_size=max_image_size,
             )
         else:
-            shutil.copy2(record.img_path, png_path)
-            scale_to_max_size(png_path, max_image_size)
+            export_comer_image(
+                record.img_path,
+                png_path,
+                margin=margin,
+                crop=False,
+                max_image_size=max_image_size,
+            )
         return True, "img", "img"
 
     if record.inkml_path is not None and record.inkml_path.is_file():

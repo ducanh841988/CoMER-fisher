@@ -40,6 +40,11 @@ def equation_bbox(binary: Image.Image) -> Optional[Tuple[int, int, int, int]]:
     return ink_mask.getbbox()
 
 
+def to_comer_polarity(binary: Image.Image) -> Image.Image:
+    """CoMER BMP convention: white strokes (255) on black background (0)."""
+    return Image.fromarray(255 - np.array(binary), mode="L")
+
+
 def binary_to_rgb(binary: Image.Image) -> Image.Image:
     """Convert black/white grayscale image to RGB (3 identical channels)."""
     return binary.convert("RGB")
@@ -47,7 +52,7 @@ def binary_to_rgb(binary: Image.Image) -> Image.Image:
 
 def _save_binary(output_path: Path, binary: Image.Image) -> None:
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    binary_to_rgb(binary).save(output_path, format="PNG")
+    binary_to_rgb(to_comer_polarity(binary)).save(output_path, format="PNG")
 
 
 try:
@@ -76,6 +81,37 @@ def scale_to_max_size(image_path: Path, max_image_size: float) -> Path:
     return image_path
 
 
+def export_comer_image(
+    input_path: Path,
+    output_path: Path,
+    margin: int = DEFAULT_MARGIN,
+    block_size: int = DEFAULT_BLOCK_SIZE,
+    c: int = DEFAULT_C,
+    crop: bool = True,
+    max_image_size: float = 0,
+) -> Path:
+    """Binarize source image and save in CoMER polarity (white ink on black)."""
+    with Image.open(input_path) as img:
+        binary = binarize_image(img.convert("RGB"), block_size=block_size, c=c)
+        if crop:
+            bbox = equation_bbox(binary)
+            if bbox is None:
+                _save_binary(output_path, binary)
+            else:
+                left, top, right, bottom = bbox
+                left = max(0, left - margin)
+                top = max(0, top - margin)
+                right = min(binary.width, right + margin)
+                bottom = min(binary.height, bottom + margin)
+                _save_binary(output_path, binary.crop((left, top, right, bottom)))
+        else:
+            _save_binary(output_path, binary)
+
+    if max_image_size > 0:
+        scale_to_max_size(output_path, max_image_size)
+    return output_path
+
+
 def crop_to_content(
     input_path: Path,
     output_path: Path,
@@ -85,20 +121,12 @@ def crop_to_content(
     max_image_size: float = 0,
 ) -> Path:
     """Binarize, find equation bounding box, crop binary image with margin, and save."""
-    with Image.open(input_path) as img:
-        rgb = img.convert("RGB")
-        binary = binarize_image(rgb, block_size=block_size, c=c)
-        bbox = equation_bbox(binary)
-        if bbox is None:
-            _save_binary(output_path, binary)
-        else:
-            left, top, right, bottom = bbox
-            left = max(0, left - margin)
-            top = max(0, top - margin)
-            right = min(binary.width, right + margin)
-            bottom = min(binary.height, bottom + margin)
-            _save_binary(output_path, binary.crop((left, top, right, bottom)))
-
-    if max_image_size > 0:
-        scale_to_max_size(output_path, max_image_size)
-    return output_path
+    return export_comer_image(
+        input_path,
+        output_path,
+        margin=margin,
+        block_size=block_size,
+        c=c,
+        crop=True,
+        max_image_size=max_image_size,
+    )

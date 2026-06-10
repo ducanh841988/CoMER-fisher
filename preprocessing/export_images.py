@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import argparse
-import shutil
 import sys
 from pathlib import Path
 from typing import Iterable, List, Optional, Tuple
@@ -13,7 +12,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from preprocessing.batch_utils import default_workers, run_parallel, summarize_results
-from preprocessing.image_crop import crop_to_content, scale_to_max_size
+from preprocessing.image_crop import export_comer_image
 from preprocessing.inkml_to_image import (
     DEFAULT_MAX_IMAGE_SIZE,
     render_inkml_to_image,
@@ -98,15 +97,21 @@ def export_one(
         margin = max(0, int(round(padding)))
         if img_path is not None and img_path.is_file():
             if crop:
-                crop_to_content(
+                export_comer_image(
                     img_path,
                     output_path,
                     margin=margin,
+                    crop=True,
                     max_image_size=max_image_size,
                 )
             else:
-                shutil.copy2(img_path, output_path)
-                scale_to_max_size(output_path, max_image_size)
+                export_comer_image(
+                    img_path,
+                    output_path,
+                    margin=margin,
+                    crop=False,
+                    max_image_size=max_image_size,
+                )
             return True, "copied+cropped" if crop else "copied"
         if inkml_path is not None and inkml_path.is_file():
             render_inkml_to_image(

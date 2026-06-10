@@ -151,8 +151,8 @@ def render_inkml_to_image(
     padding: float = 5.0,
     target_avg_height: float = TARGET_AVG_HEIGHT,
     max_image_size: float = DEFAULT_MAX_IMAGE_SIZE,
-    background: str = "white",
-    stroke_color: str = "black",
+    background: str = "black",
+    stroke_color: str = "white",
 ) -> Path:
     """Render one INKML file to a PNG image."""
     strokes = parse_inkml_strokes(inkml_path)
