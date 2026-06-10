@@ -5,7 +5,7 @@ from typing import Dict, List
 
 @lru_cache()
 def default_dict():
-    return os.path.join(os.path.dirname(os.path.abspath(__file__)), "dictionary.txt")
+    return os.path.join(os.path.dirname(os.path.abspath(__file__)), "dictionary_2023.txt")
 
 
 class CROHMEVocab:
